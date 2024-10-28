@@ -2,6 +2,7 @@ from modules.class_module.Pixel import Pixel
 from modules.class_module.GameObject import GameObject
 from random import randint
 from typing import List, Tuple, Optional
+from modules.game_settings import GRID_WIDTH, GRID_HEIGHT
 
 
 class Apple(GameObject):
@@ -15,27 +16,21 @@ class Apple(GameObject):
         super().__init__(body_color=body_color)
         self.__on_draw = on_draw  # external Ui interface func
 
-    def exist(self) -> bool:
-        """Check apple exists"""
-        return self.position is not None
-
     def draw(self):
         """Draw apple on Ui interface"""
         self.__on_draw(self)
 
     def randomize_position(
         self,
-        borders: Tuple[int, int],
         exceptions: List[Pixel] = list()
     ):
         """Set apple with its random position"""
-        max_column, max_row = borders
-        pixel_column = -1
-        pixel_row = -1
+        pixel_column = 0
+        pixel_row = 0
 
         while True:
-            pixel_column = randint(0, max_column)
-            pixel_row = randint(0, max_row)
+            pixel_column = randint(0, GRID_WIDTH - 1)
+            pixel_row = randint(0, GRID_HEIGHT - 1)
             if self.__check_pixel_position_off_exception(
                 pixel_column, pixel_row, exceptions
             ):
@@ -43,20 +38,12 @@ class Apple(GameObject):
 
         self.position = Pixel(pixel_column, pixel_row, self.body_color)
 
-    def destroy(self):
-        """Destroy game object"""
-        self.position = None
-
     def __check_pixel_position_off_exception(
         self,
         pixel_column: int,
         pixel_row: int,
         exceptions: List[Pixel]
     ) -> bool:
-        if exceptions.count == 0:
+        if not exceptions:
             return True
-
-        for pixel in exceptions:
-            if (pixel_column, pixel_row) == pixel.position:
-                return False
-        return True
+        return Pixel(pixel_column, pixel_row) not in exceptions

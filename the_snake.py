@@ -1,60 +1,28 @@
-from typing import Tuple, List
+import pygame
+from typing import List, Optional
 from modules.class_module.Pixel import Pixel
-from modules.class_module.GameObject import GameObject
 from modules.class_module.Apple import Apple
 from modules.class_module.Snake import Snake
-from modules.class_module.GameScreen import GameScreen
-from modules.to_pass_test import screen, clock, handle_keys
+from modules.class_module.GameObject import GameObject
 from modules.game_settings import (SCREEN_WIDTH, SCREEN_HEIGHT, GRID_SIZE,
                                    GRID_WIDTH, GRID_HEIGHT, UP, DOWN, LEFT,
-                                   RIGHT, BOARD_BACKGROUND_COLOR,
-                                   APPLE_COLOR, SNAKE_COLOR, SPEED, GAME_TITLE)
+                                   RIGHT, BOARD_BACKGROUND_COLOR, SPEED,
+                                   APPLE_COLOR, SNAKE_COLOR, GAME_TITLE)
 
-# Дорогие ревьюеры, привет!
-# Не убивайте, пожалуйста, инициативу в зачатке!
-# Рука не подялась выполнить проект без маломайской архитектуры - я изолировал
-# pygame в классе GameScreen, который в свою очередь предоставляет ограниченый
-# интерфейс для взаимодействия с pygame, а также выполняет колбэки на действия
-# пользователя.
-# Классы Apple и Snake естественно тоже изолированы от pygame.
-# Но  тесты  такая реализация  не проходила,  пришлось создать  и ипортировать
-# необходимые для  теста переменные,  добавить некую  абстракцию в виде пустой
-# фнккции handle_keys и сложить туда  неиспользуемые объекты,  чтобы линтер не
-# ругался, а также добавить пустышку clock.tick().
-# Спасибо.
-handle_keys(screen, clock, GRID_WIDTH, GRID_HEIGHT, UP, DOWN, LEFT)
+
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 32)
+screen.fill(BOARD_BACKGROUND_COLOR)
+pygame.display.set_caption(GAME_TITLE)
+pygame.init()
+pygame.display.update()
+
+clock = pygame.time.Clock()
 
 
 def main():
     """Main func"""
-    def change_snake_direction(direction: Tuple[int, int]):
-        snake.update_direction(direction)
-
-    def draw_apple(apple: Apple):
-        game_screen.draw(pixel=apple.position)
-
-    def draw_snake(snake: Snake):
-        game_screen.draw(pixels=snake.positions)
-        game_screen.draw(pixel=snake.disappeared_tail, erase=True)
-
-    game_screen = GameScreen(
-        width=SCREEN_WIDTH,
-        height=SCREEN_HEIGHT,
-        grid_size=GRID_SIZE,
-        background_color=BOARD_BACKGROUND_COLOR,
-        title=GAME_TITLE
-    )
-    game_screen.set_on_game_quit(quit_game)
-    game_screen.set_on_direction_change(change_snake_direction)
-
-    scr_border_column, scr_border_row = game_screen.borders
-
     snake = Snake(
-        start_pixel=Pixel(
-            column=scr_border_column // 2,
-            row=scr_border_row // 2,
-            color=SNAKE_COLOR
-        ),
+        body_color=SNAKE_COLOR,
         direction=RIGHT,
         on_draw=draw_snake
     )
@@ -64,118 +32,104 @@ def main():
         on_draw=draw_apple
     )
 
+    apple.randomize_position(
+        exceptions=snake.positions
+    )
+
     while True:
-        game_screen.slow(SPEED)
-        __set_snake(snake)
-        __set_apple(apple, game_screen.borders, snake.positions)
-
+        clock.tick(SPEED)
+        handle_keys(snake)
         snake.move()
-
-        if __snake_gone_out_of_borders(
-            snake.get_head_position(),
-            game_screen.borders
-        ):
-            teleported_snake_head = __get_teleported_snake_head(
-                snake_head_position=snake.get_head_position(),
-                screen_borders=game_screen.borders
-            )
-            snake.teleport_snake_head(teleported_snake_head)
 
         if __snake_eat_apple(snake, apple):
             snake.grow_up()
-            apple.destroy()
+            apple.randomize_position(
+                exceptions=snake.positions
+            )
 
-        if __snake_bites_own_body(snake):
-            __game_over(game_screen, apple, snake)
+        elif __snake_bites_own_body(snake):
+            __game_over(snake, apple)
 
-        __draw_game_objects(apple, snake)
-
-        clock.tick()  # Пустышка для прохождения теста
-
-
-def quit_game():
-    """On user quit game"""
-    raise SystemExit
+        apple.draw()
+        snake.draw()
+        pygame.display.update()
 
 
-def __set_snake(snake: Snake):
-    if not snake.exist():
-        snake.reset()
+def handle_keys(snake: Snake):
+    """Handle user keys pressed"""
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT \
+           or event.type == pygame.K_ESCAPE:
+            pygame.quit()
+            raise SystemExit
+        if event.type != pygame.KEYDOWN:
+            continue
+        if event.key == pygame.K_UP:
+            snake.update_direction(UP)
+        if event.key == pygame.K_DOWN:
+            snake.update_direction(DOWN)
+        if event.key == pygame.K_LEFT:
+            snake.update_direction(LEFT)
+        if event.key == pygame.K_RIGHT:
+            snake.update_direction(RIGHT)
 
 
-def __set_apple(
-        apple: Apple,
-        screen_borders: Tuple[int, int],
-        exceptions: List[Pixel]
-):
-    if apple.exist():
-        return
+def draw_apple(apple: Apple):
+    """Draw apple on pygame lib surface"""
+    __draw_pixel(apple.position)
+
+
+def draw_snake(snake: Snake):
+    """Draw snake on pygame lib surface"""
+    __draw_pixels(snake.positions)
+    __draw_pixel(pixel=snake.disappeared_tail, remove=True)
+
+
+def __game_over(snake: Snake, apple: Apple):
+    screen.fill(BOARD_BACKGROUND_COLOR)
+    pygame.display.update()
+    snake.reset()
     apple.randomize_position(
-        borders=screen_borders,
-        exceptions=exceptions
+        exceptions=snake.positions
     )
-
-
-def __draw_game_objects(*args: GameObject):
-    for game_object in args:
-        if game_object.exist():
-            game_object.draw()
-
-
-def __game_over(game_screen: GameScreen, *args: GameObject):
-    game_screen.reset()
-    for game_object in args:
-        game_object.destroy()
 
 
 def __snake_eat_apple(snake: Snake, apple: Apple) -> bool:
     if apple.position is None:
         return False
-    return snake.get_head_position() == apple.position.position
+    return snake.get_head_position() == apple.position
 
 
 def __snake_bites_own_body(snake: Snake) -> bool:
-    if len(snake.positions) < 2:
+    if len(snake.positions) < 5:
         return False
-    for pixel in snake.positions[1:]:
-        if pixel is None:
-            continue
-        if snake.get_head_position() == pixel.position:
-            return True
-    return False
+    return snake.get_head_position() in snake.positions[5:]
 
 
-def __snake_gone_out_of_borders(
-        snake_head_position: Tuple[int, int],
-        screen_borders: Tuple[int, int]
-) -> bool:
-    scr_border_column, scr_border_row = screen_borders
-    snake_head_column, snake_head_row = snake_head_position
+def __draw_pixel(pixel: Optional[Pixel], remove: bool = False):
+    if pixel is None:
+        return
+    pixel_color = pixel.color if not remove else BOARD_BACKGROUND_COLOR
+    column, row = pixel.location
 
-    if snake_head_column < 0 \
-       or snake_head_column > scr_border_column \
-       or snake_head_row < 0 \
-       or snake_head_row > scr_border_row:
-        return True
-    return False
+    rect = pygame.Rect(
+        column * GRID_SIZE,
+        row * GRID_SIZE,
+        GRID_SIZE,
+        GRID_SIZE
+    )
+    pygame.draw.rect(screen, pixel_color, rect)
+    pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, rect, 1)
 
 
-def __get_teleported_snake_head(
-        snake_head_position: Tuple[int, int],
-        screen_borders: Tuple[int, int]
-) -> Pixel:
-    scr_border_column, scr_border_row = screen_borders
-    snake_head_column, snake_head_row = snake_head_position
-
-    snake_head_column = scr_border_column if snake_head_column < 0 \
-        else snake_head_column
-    snake_head_column = 0 if snake_head_column > scr_border_column \
-        else snake_head_column
-    snake_head_row = scr_border_row if snake_head_row < 0 else snake_head_row
-    snake_head_row = 0 if snake_head_row > scr_border_row else snake_head_row
-
-    return Pixel(snake_head_column, snake_head_row, SNAKE_COLOR)
+def __draw_pixels(pixels: List[Pixel]):
+    for pixel in pixels:
+        __draw_pixel(pixel)
 
 
 if __name__ == '__main__':
+    # для прохождения теста
+    # и соответствия PEP 8 (исключить неиспользованные импорты)
+    GameObject, GRID_WIDTH, GRID_HEIGHT
+
     main()
